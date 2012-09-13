@@ -163,6 +163,7 @@ cmd_start() {
 	require_clean_working_tree
 	require_branch_absent "$BRANCH"
 	require_tag_absent "$VERSION_PREFIX$VERSION"
+        
 	if flag fetch; then
 		git fetch -q "$ORIGIN" "$DEVELOP_BRANCH"
 	fi
@@ -170,12 +171,22 @@ cmd_start() {
 		require_branches_equal "$DEVELOP_BRANCH" "$ORIGIN/$DEVELOP_BRANCH"
 	fi
 
-	# create branch
+	updatePom=true
+        # create branch
 	git checkout -b "$BRANCH" "$BASE"
+        if [ -f ./pom.xml ]; then
+          updatePom=true
+          mvn versions:set -DnewVersion=$VERSION-SNAPSHOT
+          rm ./pom.xml.versionsBackup
+          git commit ./pom.xml -m"Updating pom.xml to '$VERSION-SNAPSHOT'"
+        else
+          echo "No pom.xml found, not updating version"
+        fi
 
 	echo
 	echo "Summary of actions:"
 	echo "- A new branch '$BRANCH' was created, based on '$BASE'"
+        if updatePom; then echo "- pom.xml has been updated with $VERSION-SNAPSHOT"; fi
 	echo "- You are now on branch '$BRANCH'"
 	echo
 	echo "Follow-up actions:"
@@ -226,8 +237,19 @@ cmd_finish() {
 	# in case a previous attempt to finish this release branch has failed,
 	# but the merge into master was successful, we skip it now
 	if ! git_is_branch_merged_into "$BRANCH" "$MASTER_BRANCH"; then
+		updatePom=false
+                if [ -f ./pom.xml ]; then
+                  updatePom=true
+                  mvn versions:set -DnewVersion=master-SNAPSHOT
+                  rm ./pom.xml.versionsBackup
+                  git commit ./pom.xml -m"Updating pom.xml to '$VERSION-SNAPSHOT'"
+                else
+                  echo "No pom.xml found, not updating version"
+                fi
+
 		git checkout "$MASTER_BRANCH" || \
 		  die "Could not check out $MASTER_BRANCH."
+                 
 		if noflag squash; then
 			git merge --no-ff "$BRANCH" || \
 				die "There were merge conflicts."
