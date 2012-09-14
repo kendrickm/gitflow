@@ -177,7 +177,7 @@ cmd_start() {
         if [ -f ./pom.xml ]; then
           updatePom=true
           mvn versions:set -DnewVersion=$VERSION-SNAPSHOT
-          rm ./pom.xml.versionsBackup
+	  find . -name "*.xml.versionsBackup" -exec rm -f {} \;
          # git commit ./pom.xml -m"Updating pom.xml to '$VERSION-SNAPSHOT'"
         else
           echo "No pom.xml found, not updating version"
@@ -241,7 +241,7 @@ cmd_finish() {
                 if [ -f ./pom.xml ]; then
                   updatePom=true
                   mvn versions:set -DnewVersion=master-SNAPSHOT
-                  rm ./pom.xml.versionsBackup
+		  find . -name "*.xml.versionsBackup" -exec rm -f {} \;
                   git commit ./pom.xml -m"Updating pom.xml to 'master-SNAPSHOT'"
                 else
                   echo "No pom.xml found, not updating version"
@@ -287,7 +287,7 @@ cmd_finish() {
                 if [ -f ./pom.xml ]; then
                   updateDevPom=true
                   mvn versions:set -DnewVersion=develop-SNAPSHOT
-                  rm ./pom.xml.versionsBackup
+	          find . -name "*.xml.versionsBackup" -exec rm -f {} \;
                   git commit ./pom.xml -m"Updating pom.xml to 'devlop-SNAPSHOT'"
                 else
                   echo "No pom.xml found, not updating version"
