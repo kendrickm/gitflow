@@ -212,15 +212,26 @@ cmd_start() {
 	if git_branch_exists "$ORIGIN/$DEVELOP_BRANCH"; then
 		require_branches_equal "$DEVELOP_BRANCH" "$ORIGIN/$DEVELOP_BRANCH"
 	fi
+	
+	updatePom=true
 
 	# create branch
 	if ! git checkout -b "$BRANCH" "$BASE"; then
 		die "Could not create feature branch '$BRANCH'"
 	fi
+	if [ -f ./pom.xml ]; then
+ 	  updatePom=true
+	  mvn versions:set -DnewVersion=$BRANCH-SNAPSHOT
+	  rm ./pom.xml.versionsBackup
+	  git commit ./pom.xml -m"Updating pom.xml to '$BRANCH-SNAPSHOT'"
+	else
+	  echo "No pom.xml found, not updating version"
+ 	fi
 
 	echo
 	echo "Summary of actions:"
 	echo "- A new branch '$BRANCH' was created, based on '$BASE'"
+	if updatePom; then echo "- pom.xml has been updated with $BRANCH-SNAPSHOT"; fi
 	echo "- You are now on branch '$BRANCH'"
 	echo ""
 	echo "Now, start committing on your feature. When done, use:"
