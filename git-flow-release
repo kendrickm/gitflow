@@ -178,7 +178,7 @@ cmd_start() {
           updatePom=true
           mvn versions:set -DnewVersion=$VERSION-SNAPSHOT
           rm ./pom.xml.versionsBackup
-          git commit ./pom.xml -m"Updating pom.xml to '$VERSION-SNAPSHOT'"
+         # git commit ./pom.xml -m"Updating pom.xml to '$VERSION-SNAPSHOT'"
         else
           echo "No pom.xml found, not updating version"
         fi
@@ -186,7 +186,7 @@ cmd_start() {
 	echo
 	echo "Summary of actions:"
 	echo "- A new branch '$BRANCH' was created, based on '$BASE'"
-        if [ updatePom ]; then echo "- pom.xml has been updated with $VERSION-SNAPSHOT"; fi
+        if [ updatePom ]; then echo "- pom.xml has been updated with $VERSION-SNAPSHOT BUT NOT COMMITTED"; fi
 	echo "- You are now on branch '$BRANCH'"
 	echo
 	echo "Follow-up actions:"
