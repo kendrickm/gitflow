@@ -64,7 +64,7 @@ cmd_list() {
 	local current_branch
 	local short_names
 	release_branches=$(echo "$(git_local_branches)" | grep "^$PREFIX")
-	if [ -z "$release_branches" ]; then
+	if [ -z "$release_branches" ]; then	
 		warn "No release branches exist."
                 warn ""
                 warn "You can start a new release branch:"
@@ -171,7 +171,7 @@ cmd_start() {
 		require_branches_equal "$DEVELOP_BRANCH" "$ORIGIN/$DEVELOP_BRANCH"
 	fi
 
-	updatePom=true
+	updatePom=false
         # create branch
 	git checkout -b "$BRANCH" "$BASE"
         if [ -f ./pom.xml ]; then
@@ -186,7 +186,7 @@ cmd_start() {
 	echo
 	echo "Summary of actions:"
 	echo "- A new branch '$BRANCH' was created, based on '$BASE'"
-        if updatePom; then echo "- pom.xml has been updated with $VERSION-SNAPSHOT"; fi
+        if [ updatePom ]; then echo "- pom.xml has been updated with $VERSION-SNAPSHOT"; fi
 	echo "- You are now on branch '$BRANCH'"
 	echo
 	echo "Follow-up actions:"
@@ -242,7 +242,7 @@ cmd_finish() {
                   updatePom=true
                   mvn versions:set -DnewVersion=master-SNAPSHOT
                   rm ./pom.xml.versionsBackup
-                  git commit ./pom.xml -m"Updating pom.xml to '$VERSION-SNAPSHOT'"
+                  git commit ./pom.xml -m"Updating pom.xml to 'master-SNAPSHOT'"
                 else
                   echo "No pom.xml found, not updating version"
                 fi
@@ -281,6 +281,17 @@ cmd_finish() {
 	# in case a previous attempt to finish this release branch has failed,
 	# but the merge into develop was successful, we skip it now
 	if ! git_is_branch_merged_into "$BRANCH" "$DEVELOP_BRANCH"; then
+		git checkout "$BRANCH" || \
+		  die "Could not check out $BRANCH"
+	       updateDevPom=false	
+                if [ -f ./pom.xml ]; then
+                  updateDevPom=true
+                  mvn versions:set -DnewVersion=develop-SNAPSHOT
+                  rm ./pom.xml.versionsBackup
+                  git commit ./pom.xml -m"Updating pom.xml to 'devlop-SNAPSHOT'"
+                else
+                  echo "No pom.xml found, not updating version"
+                fi
 		git checkout "$DEVELOP_BRANCH" || \
 		  die "Could not check out $DEVELOP_BRANCH."
 
@@ -322,9 +333,15 @@ cmd_finish() {
 	echo
 	echo "Summary of actions:"
 	echo "- Latest objects have been fetched from '$ORIGIN'"
+	if [ updatePom ]; then
+		 echo "- pom.xml was updated to master-SNAPSHOT"
+	fi
 	echo "- Release branch has been merged into '$MASTER_BRANCH'"
 	if noflag notag; then
 		echo "- The release was tagged '$tagname'"
+	fi
+	if updateDevPom; then
+		echo "- release branch pom.xml was updated to develop-SNAPSHOT"
 	fi
 	echo "- Release branch has been back-merged into '$DEVELOP_BRANCH'"
 	if flag keep; then
