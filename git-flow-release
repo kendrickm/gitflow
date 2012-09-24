@@ -198,6 +198,183 @@ cmd_start() {
 	echo
 }
 
+cmd_finishdevelop() {
+	DEFINE_boolean fetch false "fetch from $ORIGIN before performing finish" F
+	DEFINE_boolean sign false "sign the release tag cryptographically" s
+	DEFINE_string signingkey "" "use the given GPG-key for the digital signature (implies -s)" u
+	DEFINE_string message "" "use the given tag message" m
+	DEFINE_string messagefile "" "use the contents of the given file as a tag message" f
+	DEFINE_boolean push false "push to $ORIGIN after performing finish" p
+	DEFINE_boolean keep false "keep branch after performing finish" k
+	DEFINE_boolean notag false "don't tag this release" n
+	DEFINE_boolean squash false "squash release during merge" S
+
+	parse_args "$@"
+	require_version_arg
+
+	# handle flags that imply other flags
+	if [ "$FLAGS_signingkey" != "" ]; then
+		FLAGS_sign=$FLAGS_TRUE
+	fi
+
+	# sanity checks
+	require_branch "$BRANCH"
+	require_clean_working_tree
+	if flag fetch; then
+		git fetch -q "$ORIGIN" "$MASTER_BRANCH" || \
+		  die "Could not fetch $MASTER_BRANCH from $ORIGIN."
+		git fetch -q "$ORIGIN" "$DEVELOP_BRANCH" || \
+		  die "Could not fetch $DEVELOP_BRANCH from $ORIGIN."
+	fi
+	if has "$ORIGIN/$MASTER_BRANCH" $(git_remote_branches); then
+		require_branches_equal "$MASTER_BRANCH" "$ORIGIN/$MASTER_BRANCH"
+	fi
+	if has "$ORIGIN/$DEVELOP_BRANCH" $(git_remote_branches); then
+		require_branches_equal "$DEVELOP_BRANCH" "$ORIGIN/$DEVELOP_BRANCH"
+	fi
+	
+	# try to merge into develop
+	# in case a previous attempt to finish this release branch has failed,
+	# but the merge into develop was successful, we skip it now
+	if ! git_is_branch_merged_into "$BRANCH" "$DEVELOP_BRANCH"; then
+	       	git checkout "$DEVELOP_BRANCH" || \
+		  die "Could not check out $DEVELOP_BRANCH."
+		updateDevPom=false	
+                if [ -f ./pom.xml ]; then
+                  updateDevPom=true
+                  mvn versions:set -DnewVersion=develop-SNAPSHOT
+	          find . -name "*.xml.versionsBackup" -exec rm -f {} \;
+                  git stash save "Develop"
+                else
+                  echo "No pom.xml found, not updating version"
+                fi
+			# TODO: Actually, accounting for 'git describe' pays, so we should
+		# ideally git merge --no-ff $tagname here, instead!
+		if noflag squash; then
+			git merge --no-ff "$BRANCH" || \
+				die "There were merge conflicts."
+				# TODO: What do we do now?
+		else
+			git merge --squash "$BRANCH" || \
+				die "There were merge conflicts."
+				# TODO: What do we do now?
+			git commit
+		fi
+	fi
+
+	echo
+	echo "Summary of actions:"
+	echo "- Latest objects have been fetched from '$ORIGIN'"
+	echo "- $BRANCH was merged into $DEVELOP_BRANCH"
+	if updateDevPom; then
+		echo "- pom.xml was corrected to develop-SNAPSHOT but was NOT COMMITTED. This has been stashed under 'Develop' and can be retrieved and committed."
+	fi
+
+}
+
+cmd_finishmaster() {
+	DEFINE_boolean fetch false "fetch from $ORIGIN before performing finish" F
+	DEFINE_boolean sign false "sign the release tag cryptographically" s
+	DEFINE_string signingkey "" "use the given GPG-key for the digital signature (implies -s)" u
+	DEFINE_string message "" "use the given tag message" m
+	DEFINE_string messagefile "" "use the contents of the given file as a tag message" f
+	DEFINE_boolean push false "push to $ORIGIN after performing finish" p
+	DEFINE_boolean keep false "keep branch after performing finish" k
+	DEFINE_boolean notag false "don't tag this release" n
+	DEFINE_boolean squash false "squash release during merge" S
+
+	parse_args "$@"
+	require_version_arg
+
+	# handle flags that imply other flags
+	if [ "$FLAGS_signingkey" != "" ]; then
+		FLAGS_sign=$FLAGS_TRUE
+	fi
+
+	# sanity checks
+	require_branch "$BRANCH"
+	require_clean_working_tree
+	if flag fetch; then
+		git fetch -q "$ORIGIN" "$MASTER_BRANCH" || \
+		  die "Could not fetch $MASTER_BRANCH from $ORIGIN."
+		git fetch -q "$ORIGIN" "$DEVELOP_BRANCH" || \
+		  die "Could not fetch $DEVELOP_BRANCH from $ORIGIN."
+	fi
+	if has "$ORIGIN/$MASTER_BRANCH" $(git_remote_branches); then
+		require_branches_equal "$MASTER_BRANCH" "$ORIGIN/$MASTER_BRANCH"
+	fi
+	if has "$ORIGIN/$DEVELOP_BRANCH" $(git_remote_branches); then
+		require_branches_equal "$DEVELOP_BRANCH" "$ORIGIN/$DEVELOP_BRANCH"
+	fi
+
+	# try to merge into master
+	# in case a previous attempt to finish this release branch has failed,
+	# but the merge into master was successful, we skip it now
+	if ! git_is_branch_merged_into "$BRANCH" "$MASTER_BRANCH"; then
+
+		git checkout "$MASTER_BRANCH" || \
+		  die "Could not check out $MASTER_BRANCH."
+                 
+		if noflag squash; then
+			git merge --no-ff "$BRANCH" || \
+				die "There were merge conflicts."
+				# TODO: What do we do now?
+		else
+			git merge --squash "$BRANCH" || \
+				die "There were merge conflicts."
+			git commit
+		fi
+
+		updatePom=false
+                if [ -f ./pom.xml ]; then
+                  updatePom=true
+                  mvn versions:set -DnewVersion=master-SNAPSHOT
+		  find . -name "*.xml.versionsBackup" -exec rm -f {} \;
+                  git stash save "Master"
+                else
+                  echo "No pom.xml found, not updating version"
+                fi
+
+	fi
+
+	if noflag notag; then
+		# try to tag the release
+		# in case a previous attempt to finish this release branch has failed,
+		# but the tag was set successful, we skip it now
+		local tagname=$VERSION_PREFIX$VERSION
+		if ! git_tag_exists "$tagname"; then
+			local opts="-a"
+			flag sign && opts="$opts -s"
+			[ "$FLAGS_signingkey" != "" ] && opts="$opts -u '$FLAGS_signingkey'"
+			[ "$FLAGS_message" != "" ] && opts="$opts -m '$FLAGS_message'"
+			[ "$FLAGS_messagefile" != "" ] && opts="$opts -F '$FLAGS_messagefile'"
+			eval git tag $opts "$tagname" "$BRANCH" || \
+			die "Tagging failed. Please run finish again to retry."
+		fi
+	fi
+	
+	echo
+	echo "Summary of actions:"
+	echo "- Latest objects have been fetched from '$ORIGIN'"
+	echo "- Release branch has been merged into '$MASTER_BRANCH'"
+	if [ updatePom ]; then
+		 echo "- pom.xml was updated to master-SNAPSHOT and git stashed under master. Review and commit this change."
+	fi
+	if noflag notag; then
+		echo "- The release was tagged '$tagname'"
+	fi
+	if flag keep; then
+		echo "- Release branch '$BRANCH' is still available"
+	else
+		echo "- Release branch '$BRANCH' has been deleted"
+	fi
+	if flag push; then
+		echo "- '$DEVELOP_BRANCH', '$MASTER_BRANCH' and tags have been pushed to '$ORIGIN'"
+		echo "- Release branch '$BRANCH' in '$ORIGIN' has been deleted."
+	fi
+	echo
+}
+
 cmd_finish() {
 	DEFINE_boolean fetch false "fetch from $ORIGIN before performing finish" F
 	DEFINE_boolean sign false "sign the release tag cryptographically" s
